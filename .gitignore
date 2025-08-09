@@ -1,0 +1,12 @@
+.venv/
+__pycache__/
+.ipynb_checkpoints/
+.data_cache/
+
+# Streamlit
+.streamlit/
+
+# Outputs
+/data/**/*.nii*
+/data/**/*.csv
+/figures/*.png
