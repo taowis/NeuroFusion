@@ -1,8 +1,6 @@
 from __future__ import annotations
 from pathlib import Path
 import tempfile
-
-import numpy as np
 import pandas as pd
 from nilearn import plotting
 
@@ -13,7 +11,6 @@ def cache_path(name: str) -> Path:
     return CACHE_DIR / name
 
 def save_stat_map_img(img_nii, title: str = "stat map") -> Path:
-    """Render a static PNG from a Nifti1Image (for Streamlit)."""
     tmpdir = Path(tempfile.mkdtemp())
     out_png = tmpdir / "stat_map.png"
     display = plotting.plot_stat_map(img_nii, title=title, display_mode="ortho")

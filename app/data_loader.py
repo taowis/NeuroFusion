@@ -1,16 +1,19 @@
 from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Tuple
-
 import numpy as np
 import pandas as pd
 from nilearn import datasets, image
 
 try:
     import abagen
-except Exception as e:  # allow app to run without abagen for demo
+except Exception:
     abagen = None
+
+try:
+    import nibabel as nib
+except Exception:
+    nib = None
 
 DATA_DIR = Path("data")
 ATLAS_DIR = DATA_DIR / "atlas"
@@ -21,29 +24,43 @@ EXPR_DIR.mkdir(parents=True, exist_ok=True)
 @dataclass
 class Atlas:
     name: str
-    maps_nii: Path
-    labels: pd.DataFrame  # columns: [index, label]
+    maps_path: str  # path to atlas NIfTI file on disk
+    labels: pd.DataFrame  # cols: [index, label]
+
+def _ensure_maps_path(maps_obj, out_path: Path) -> str:
+    if isinstance(maps_obj, (str, bytes, Path)):
+        return str(maps_obj)
+    if hasattr(maps_obj, "get_filename"):
+        fn = maps_obj.get_filename()
+        if fn:
+            return str(fn)
+    if nib is None:
+        raise RuntimeError("nibabel is required to save atlas image to disk but is not available.")
+    out_path = Path(out_path)
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    nib.save(maps_obj, out_path)
+    return str(out_path)
 
 def load_harvard_oxford(resolution: int = 2) -> Atlas:
-    atlas = datasets.fetch_atlas_harvard_oxford("cort-maxprob-thr25-2mm") if resolution == 2 else datasets.fetch_atlas_harvard_oxford("cort-maxprob-thr25-1mm")
+    key = "cort-maxprob-thr25-2mm" if resolution == 2 else "cort-maxprob-thr25-1mm"
+    atl = datasets.fetch_atlas_harvard_oxford(key)
+    maps_out = ATLAS_DIR / f"harvard_oxford_cort_thr25_{resolution}mm.nii.gz"
+    maps_path = _ensure_maps_path(atl.maps, maps_out)
     labels = pd.DataFrame({
-        "index": np.arange(len(atlas.labels)),
-        "label": atlas.labels,
+        "index": np.arange(len(atl.labels)),
+        "label": atl.labels,
     })
-    return Atlas(
-        name="HarvardOxford-Cort",
-        maps_nii=Path(atlas.maps),
-        labels=labels,
-    )
+    return Atlas(name="HarvardOxford-Cort", maps_path=maps_path, labels=labels)
+
+def _zscore_columns(df: pd.DataFrame) -> pd.DataFrame:
+    return df.apply(lambda s: (s - s.mean()) / (s.std(ddof=0) if s.std(ddof=0) != 0 else 1.0), axis=0)
 
 def prep_ahba_to_regions(atlas: Atlas) -> pd.DataFrame:
-    """Return a long table: columns [gene, region, value]. If abagen is missing, mock data."""
     outcsv = EXPR_DIR / f"ahba_{atlas.name}.csv"
     if outcsv.exists():
         return pd.read_csv(outcsv)
 
     if abagen is None:
-        # Demo fallback: create synthetic expressions for 100 genes × N regions
         rng = np.random.default_rng(42)
         genes = [f"GENE{i:03d}" for i in range(1, 101)]
         regions = atlas.labels["label"].astype(str).tolist()
@@ -55,19 +72,15 @@ def prep_ahba_to_regions(atlas: Atlas) -> pd.DataFrame:
         df.to_csv(outcsv, index=False)
         return df
 
-    # Real aggregation path using abagen
-    # Map tissue samples to atlas, then aggregate by region
-    # abagen.get_expression_data returns regions × genes matrix by default
     expr = abagen.get_expression_data(
-        atlas.maps_nii.as_posix(),
+        atlas.maps_path,
         ibf_threshold=0.5,
         region_agg="mean",
-        donor_norm=True,
-        gene_norm=True,
         exact=False,
-        lr_mirror=True,
     )
-    df = expr.reset_index().melt(id_vars="index", var_name="gene", value_name="value").rename(columns={"index": "region"})
+    expr = _zscore_columns(expr)
+
+    df = expr.reset_index().melt(id_vars="index", var_name="gene", value_name="value")                  .rename(columns={"index": "region"})
     df.to_csv(outcsv, index=False)
     return df
 
@@ -75,21 +88,15 @@ def gene_list(expr_df: pd.DataFrame) -> list[str]:
     return sorted(expr_df["gene"].unique().tolist())
 
 def gene_to_stat_map(atlas: Atlas, expr_df: pd.DataFrame, gene: str):
-    """Convert region values for a gene into a 3D NIfTI by painting atlas regions."""
-    data_img = image.load_img(atlas.maps_nii)
+    data_img = image.load_img(atlas.maps_path)
     data = data_img.get_fdata().copy()
-
-    # Build region index → value map
     reg_df = atlas.labels.copy()
     reg_df["label"] = reg_df["label"].astype(str)
     gdf = expr_df[expr_df["gene"] == gene]
     merged = reg_df.merge(gdf, left_on="label", right_on="region", how="left")
-
-    # New volume initialized to zeros
     stat = np.zeros_like(data, dtype=float)
-    for idx, row in merged.iterrows():
+    for _, row in merged.iterrows():
         region_index = row["index"]
         val = row["value"] if not np.isnan(row["value"]) else 0.0
         stat[data == region_index] = val
-
     return image.new_img_like(data_img, stat)
