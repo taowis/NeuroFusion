@@ -76,7 +76,7 @@ See comments in each file; `app/data_loader.py` centralizes data I/O.
 
 If you use **NeuroFusion** in your research, please cite it as:
 
-> Lai K. *NeuroFusion: An Interactive Multimodal Neuro-Bioinformatics Dashboard* (Version 0.1.0) [Computer software]. GitHub. Available at: https://github.com/yourusername/NeuroFusion. **Draft for submission to the Journal of Open Source Software (JOSS).**
+> Lai K. *NeuroFusion: An Interactive Multimodal Neuro-Bioinformatics Dashboard* (Version 0.1.0) [Computer software]. GitHub: https://github.com/taowis/NeuroFusion. **Prepared for submission to the Journal of Open Source Software (JOSS).**
 
 ## License
 MIT (see `LICENSE`). Cite the Allen Institute + atlas authors when publishing.
