@@ -11,6 +11,7 @@ Interactive dashboard that fuses **brain transcriptomics** (Allen Human Brain At
 
 ## 📂 Project Structure
 
+```
 NeuroFusion/
 ├── README.md                # Project description and instructions
 ├── LICENSE                  # MIT license
@@ -32,6 +33,7 @@ NeuroFusion/
 ├── figures/                 # Screenshots or figures for docs
 ├── notebooks/               # (Optional) exploration notebooks
 └── .github/workflows/       # CI/CD configs (optional)
+```
 
 ---
 
